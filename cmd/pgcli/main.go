@@ -151,15 +151,23 @@ func main() {
 
 	// Execute mode
 	if *execute != "" {
-		result, err := executor.Execute(context.Background(), *execute)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-			os.Exit(1)
-		}
-		if result != nil && len(result.Columns) > 0 {
-			for _, row := range result.Rows {
-				fmt.Println(strings.Join(row, "|"))
+		queries := cli.SplitStatements(*execute)
+		hasError := false
+		for _, query := range queries {
+			result, err := executor.Execute(context.Background(), query)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
+				hasError = true
+				continue
 			}
+			if result != nil && len(result.Columns) > 0 {
+				for _, row := range result.Rows {
+					fmt.Println(strings.Join(row, "|"))
+				}
+			}
+		}
+		if hasError {
+			os.Exit(1)
 		}
 		os.Exit(0)
 	}

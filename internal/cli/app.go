@@ -222,7 +222,7 @@ func (a *App) executeInput(input string, forceVertical bool) bool {
 	ctx := context.Background()
 
 	// Split on semicolons for multi-statement
-	queries := splitStatements(input)
+	queries := SplitStatements(input)
 	for _, query := range queries {
 		query = strings.TrimSpace(query)
 		if query == "" {
@@ -417,8 +417,8 @@ func (a *App) Run() error {
 	return nil
 }
 
-// splitStatements splits SQL input on semicolons, respecting strings and comments.
-func splitStatements(input string) []string {
+// SplitStatements splits SQL input on semicolons, respecting strings and comments.
+func SplitStatements(input string) []string {
 	var statements []string
 	var current strings.Builder
 	inSingleQuote := false

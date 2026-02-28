@@ -346,6 +346,24 @@ func TestFormatValue(t *testing.T) {
 	}
 }
 
+func TestParseDSN_URI_NoUserDoesNotInheritDefault(t *testing.T) {
+	cfg, err := ParseDSN("postgres://localhost:5432/testdb")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.User != "" {
+		t.Errorf("URI without user should have empty user, got %q", cfg.User)
+	}
+
+	defCfg := DefaultConfig()
+	if defCfg.User == "" {
+		t.Skip("USER env not set, cannot verify default differs")
+	}
+	if cfg.User == defCfg.User {
+		t.Errorf("ParseDSN without user should not inherit DefaultConfig user %q", defCfg.User)
+	}
+}
+
 func TestParseDSN_SSLMode(t *testing.T) {
 	cfg, err := ParseDSN("postgres://localhost/db?sslmode=disable")
 	if err != nil {

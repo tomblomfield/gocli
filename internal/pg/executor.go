@@ -86,6 +86,8 @@ func ParseDSN(dsn string) (ConnectionConfig, error) {
 			if pw, ok := u.User.Password(); ok {
 				cfg.Password = pw
 			}
+		} else {
+			cfg.User = ""
 		}
 		if u.Path != "" && u.Path != "/" {
 			cfg.Database = strings.TrimPrefix(u.Path, "/")
