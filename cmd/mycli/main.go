@@ -6,13 +6,15 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
+	"github.com/chzyer/readline"
 	"github.com/tomblomfield/gocli/internal/cli"
 	"github.com/tomblomfield/gocli/internal/config"
+	"github.com/tomblomfield/gocli/internal/highlight"
 	"github.com/tomblomfield/gocli/internal/mysql"
 )
 
@@ -160,25 +162,68 @@ func main() {
 }
 
 func runREPL(app *cli.App, cfg *config.Config) {
-	scanner := bufio.NewScanner(os.Stdin)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+	historyFile := cfg.HistoryFile
+	if historyFile == "" {
+		home, _ := os.UserHomeDir()
+		historyFile = filepath.Join(home, ".config", "mycli", "history")
+		os.MkdirAll(filepath.Dir(historyFile), 0755)
+	}
+
+	style := highlight.GetStyle(cfg.SyntaxStyle)
+
+	rl, err := readline.NewEx(&readline.Config{
+		Prompt:          app.GetPrompt(),
+		HistoryFile:     historyFile,
+		InterruptPrompt: "^C",
+		EOFPrompt:       "\\q",
+		Painter:         &sqlPainter{style: style},
+	})
+	if err != nil {
+		runBasicREPL(app, cfg)
+		return
+	}
+	defer rl.Close()
 
 	for {
-		prompt := app.GetPrompt()
-		fmt.Fprint(os.Stdout, prompt)
-
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil && err != io.EOF {
-				fmt.Fprintf(os.Stderr, "Read error: %s\n", err)
-			}
+		rl.SetPrompt(app.GetPrompt())
+		input, err := rl.Readline()
+		if err != nil {
 			break
 		}
 
-		input := scanner.Text()
 		if shouldQuit := app.HandleInput(input); shouldQuit {
 			break
 		}
 	}
+}
+
+func runBasicREPL(app *cli.App, cfg *config.Config) {
+	scanner := bufio.NewScanner(os.Stdin)
+	scanner.Buffer(make([]byte, 1024*1024), 1024*1024)
+
+	for {
+		fmt.Fprint(os.Stdout, app.GetPrompt())
+
+		if !scanner.Scan() {
+			break
+		}
+
+		if shouldQuit := app.HandleInput(scanner.Text()); shouldQuit {
+			break
+		}
+	}
+}
+
+type sqlPainter struct {
+	style highlight.Style
+}
+
+func (p *sqlPainter) Paint(line []rune, _ int) []rune {
+	if len(line) == 0 {
+		return line
+	}
+	highlighted := highlight.Highlight(string(line), p.style)
+	return []rune(highlighted)
 }
 
 func buildMySQLConfig(cfg *config.Config) mysql.ConnectionConfig {
