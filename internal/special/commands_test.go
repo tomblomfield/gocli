@@ -408,3 +408,163 @@ func TestExecute_EmptyFavorites(t *testing.T) {
 		t.Error("should report no favorites")
 	}
 }
+
+func TestExecute_Echo(t *testing.T) {
+	r := NewRegistry()
+
+	results, err := r.Execute(context.Background(), nil, `\echo hello world`)
+	if err != nil {
+		t.Fatalf("\\echo should not error: %v", err)
+	}
+	if len(results) == 0 || results[0].StatusText != "hello world" {
+		t.Errorf("\\echo should output 'hello world', got %q", results[0].StatusText)
+	}
+}
+
+func TestExecute_TableFormat(t *testing.T) {
+	r := NewRegistry()
+
+	// Default should be unicode
+	if r.TableFormat != "unicode" {
+		t.Errorf("default table format should be 'unicode', got %q", r.TableFormat)
+	}
+
+	// Change to ascii
+	results, err := r.Execute(context.Background(), nil, `\t ascii`)
+	if err != nil {
+		t.Fatalf("\\T ascii should not error: %v", err)
+	}
+	if r.TableFormat != "ascii" {
+		t.Errorf("table format should be 'ascii', got %q", r.TableFormat)
+	}
+	if len(results) == 0 || !strings.Contains(results[0].StatusText, "ascii") {
+		t.Error("should confirm format change")
+	}
+
+	// Invalid format
+	_, err = r.Execute(context.Background(), nil, `\t bogus`)
+	if err == nil {
+		t.Error("invalid format should error")
+	}
+
+	// Show current format
+	results, err = r.Execute(context.Background(), nil, `\t`)
+	if err != nil {
+		t.Fatalf("\\T with no arg should not error: %v", err)
+	}
+	if len(results) == 0 || !strings.Contains(results[0].StatusText, "ascii") {
+		t.Error("should show current format")
+	}
+}
+
+func TestExecute_Pset(t *testing.T) {
+	r := NewRegistry()
+
+	// Show all settings
+	results, err := r.Execute(context.Background(), nil, `\pset`)
+	if err != nil {
+		t.Fatalf("\\pset should not error: %v", err)
+	}
+	if len(results) == 0 || results[0].StatusText == "" {
+		t.Error("\\pset should show settings")
+	}
+
+	// Set format
+	results, err = r.Execute(context.Background(), nil, `\pset format csv`)
+	if err != nil {
+		t.Fatalf("\\pset format csv should not error: %v", err)
+	}
+	if r.TableFormat != "csv" {
+		t.Errorf("format should be 'csv', got %q", r.TableFormat)
+	}
+
+	// Toggle expanded
+	r.Expanded = false
+	results, err = r.Execute(context.Background(), nil, `\pset expanded on`)
+	if err != nil {
+		t.Fatalf("\\pset expanded on should not error: %v", err)
+	}
+	if !r.Expanded {
+		t.Error("expanded should be on")
+	}
+
+	// Unknown pset key
+	_, err = r.Execute(context.Background(), nil, `\pset boguskey`)
+	if err == nil {
+		t.Error("unknown pset key should error")
+	}
+}
+
+func TestExecute_NamedQueries(t *testing.T) {
+	r := NewRegistry()
+
+	// Save via \ns
+	results, err := r.Execute(context.Background(), nil, `\ns active_users SELECT * FROM users WHERE active`)
+	if err != nil {
+		t.Fatalf("\\ns should not error: %v", err)
+	}
+	if len(results) == 0 || !strings.Contains(results[0].StatusText, "active_users") {
+		t.Error("should confirm save")
+	}
+
+	// Print via \np
+	results, err = r.Execute(context.Background(), nil, `\np active_users`)
+	if err != nil {
+		t.Fatalf("\\np should not error: %v", err)
+	}
+	if len(results) == 0 || results[0].StatusText != "SELECT * FROM users WHERE active" {
+		t.Errorf("\\np should show the query, got %q", results[0].StatusText)
+	}
+
+	// List via \n
+	results, err = r.Execute(context.Background(), nil, `\n`)
+	if err != nil {
+		t.Fatalf("\\n should not error: %v", err)
+	}
+	if len(results) == 0 || len(results[0].Rows) == 0 {
+		t.Error("\\n should list named queries")
+	}
+
+	// Delete via \nd
+	results, err = r.Execute(context.Background(), nil, `\nd active_users`)
+	if err != nil {
+		t.Fatalf("\\nd should not error: %v", err)
+	}
+	if _, ok := r.Favorites["active_users"]; ok {
+		t.Error("named query should be deleted")
+	}
+
+	// \np for nonexistent
+	_, err = r.Execute(context.Background(), nil, `\np nonexistent`)
+	if err == nil {
+		t.Error("\\np for nonexistent should error")
+	}
+}
+
+func TestRegisterPG_Commands(t *testing.T) {
+	r := NewRegistry()
+	RegisterPG(r)
+
+	pgCommands := []string{
+		`\dt`, `\dv`, `\di`, `\ds`, `\df`, `\dn`, `\du`,
+		`\l`, `\d`, `\dx`, `\db`, `\dp`, `\sf`, `\conninfo`,
+		`\h`, `\i`, `\o`, `\copy`, `\dm`, `\dd`, `\c`, `\v`,
+	}
+
+	for _, cmd := range pgCommands {
+		if !r.IsSpecial(cmd) {
+			t.Errorf("PG command %s should be registered", cmd)
+		}
+	}
+
+	// Test aliases
+	if !r.IsSpecial(`\connect`) {
+		t.Error("\\connect should be an alias for \\c")
+	}
+	if !r.IsSpecial(`\z`) {
+		t.Error("\\z should be an alias for \\dp")
+	}
+	if !r.IsSpecial("describe") {
+		t.Error("describe should be an alias for \\d")
+	}
+}

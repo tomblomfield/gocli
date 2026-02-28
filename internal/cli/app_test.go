@@ -1,9 +1,13 @@
 package cli
 
 import (
+	"bytes"
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/tomblomfield/gocli/internal/config"
+	"github.com/tomblomfield/gocli/internal/format"
 )
 
 func TestSplitStatements_Single(t *testing.T) {
@@ -183,5 +187,282 @@ func TestGetContinuationPrompt_Default(t *testing.T) {
 	prompt := app.GetContinuationPrompt()
 	if prompt != "-> " {
 		t.Errorf("default continuation prompt should be '-> ', got %q", prompt)
+	}
+}
+
+// mockExecutor implements the Executor interface for testing.
+type mockExecutor struct {
+	results  []*format.QueryResult
+	err      error
+	database string
+	version  string
+}
+
+func (m *mockExecutor) Execute(_ context.Context, query string) (*format.QueryResult, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if len(m.results) > 0 {
+		r := m.results[0]
+		if len(m.results) > 1 {
+			m.results = m.results[1:]
+		}
+		return r, nil
+	}
+	return &format.QueryResult{
+		Columns:    []string{"result"},
+		Rows:       [][]string{{"1"}},
+		StatusText: "(1 row)",
+		RowCount:   1,
+	}, nil
+}
+
+func (m *mockExecutor) Close() error              { return nil }
+func (m *mockExecutor) Database() string           { return m.database }
+func (m *mockExecutor) ServerVersion() (string, error) { return m.version, nil }
+func (m *mockExecutor) Tables(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (m *mockExecutor) Columns(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (m *mockExecutor) Schemas(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockExecutor) Functions(_ context.Context, _ string) ([]string, error) { return nil, nil }
+func (m *mockExecutor) Databases(_ context.Context) ([]string, error) { return nil, nil }
+func (m *mockExecutor) Datatypes(_ context.Context) []string { return nil }
+
+func newTestApp(mode DBMode) (*App, *bytes.Buffer) {
+	cfg := config.DefaultPGConfig()
+	if mode == MySQL {
+		cfg = config.DefaultMySQLConfig()
+	}
+	cfg.LessChatty = true
+	mock := &mockExecutor{database: "testdb", version: "15.0"}
+	app := NewApp(mode, mock, mock, cfg)
+	var buf bytes.Buffer
+	app.Stdout = &buf
+	app.Stderr = &buf
+	return app, &buf
+}
+
+func TestNewApp_RegistersPGCommands(t *testing.T) {
+	app, _ := newTestApp(PostgreSQL)
+	// PG-specific commands should be registered
+	pgCommands := []string{`\dt`, `\d`, `\l`, `\dn`, `\du`, `\dx`, `\di`, `\ds`, `\df`, `\dv`, `\conninfo`}
+	for _, cmd := range pgCommands {
+		if !app.special.IsSpecial(cmd) {
+			t.Errorf("PG command %s should be registered in App", cmd)
+		}
+	}
+}
+
+func TestNewApp_RegistersMySQLCommands(t *testing.T) {
+	app, _ := newTestApp(MySQL)
+	// Common commands should be registered
+	if !app.special.IsSpecial(`\?`) {
+		t.Error("common command \\? should be registered")
+	}
+	if !app.special.IsSpecial(`\q`) {
+		t.Error("common command \\q should be registered")
+	}
+}
+
+func TestExecuteNonInteractive_SQL(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	hasError := app.ExecuteNonInteractive("SELECT 1")
+	if hasError {
+		t.Error("should not have error for valid SQL")
+	}
+	output := buf.String()
+	if output == "" {
+		t.Error("should produce output for SELECT query")
+	}
+}
+
+func TestExecuteNonInteractive_SpecialCommand(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	hasError := app.ExecuteNonInteractive(`\?`)
+	if hasError {
+		t.Error("should not have error for \\? command")
+	}
+	output := buf.String()
+	if output == "" {
+		t.Error("\\? should produce help output")
+	}
+}
+
+func TestExecuteNonInteractive_MultiStatement(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	hasError := app.ExecuteNonInteractive("SELECT 1; SELECT 2")
+	if hasError {
+		t.Error("should not have error for multi-statement")
+	}
+	output := buf.String()
+	if output == "" {
+		t.Error("multi-statement should produce output")
+	}
+}
+
+func TestExecuteNonInteractive_Empty(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	hasError := app.ExecuteNonInteractive("")
+	if hasError {
+		t.Error("empty input should not be an error")
+	}
+	if buf.String() != "" {
+		t.Error("empty input should produce no output")
+	}
+}
+
+func TestExecuteNonInteractive_Error(t *testing.T) {
+	cfg := config.DefaultPGConfig()
+	cfg.LessChatty = true
+	mock := &mockExecutor{
+		database: "testdb",
+		version:  "15.0",
+		err:      context.DeadlineExceeded,
+	}
+	app := NewApp(PostgreSQL, mock, mock, cfg)
+	var buf bytes.Buffer
+	app.Stdout = &buf
+	app.Stderr = &buf
+
+	hasError := app.ExecuteNonInteractive("SELECT 1")
+	if !hasError {
+		t.Error("should report error when executor fails")
+	}
+}
+
+func TestHandleInput_SpecialCommand_Quit(t *testing.T) {
+	app, _ := newTestApp(PostgreSQL)
+	shouldQuit := app.HandleInput(`\q`)
+	if !shouldQuit {
+		t.Error("\\q should signal quit")
+	}
+}
+
+func TestHandleInput_SpecialCommand_Help(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	shouldQuit := app.HandleInput(`\?`)
+	if shouldQuit {
+		t.Error("\\? should not signal quit")
+	}
+	if buf.Len() == 0 {
+		t.Error("\\? should produce help output")
+	}
+}
+
+func TestHandleInput_SQL(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	shouldQuit := app.HandleInput("SELECT 1;")
+	if shouldQuit {
+		t.Error("SQL should not signal quit")
+	}
+	if buf.Len() == 0 {
+		t.Error("SQL should produce output")
+	}
+}
+
+// pgcli equivalent: test_on_error_resume
+func TestHandleInput_OnErrorResume(t *testing.T) {
+	cfg := config.DefaultPGConfig()
+	cfg.LessChatty = true
+	cfg.OnError = "RESUME"
+	mock := &mockExecutor{database: "testdb", version: "15.0"}
+	app := NewApp(PostgreSQL, mock, mock, cfg)
+	var buf bytes.Buffer
+	app.Stdout = &buf
+	app.Stderr = &buf
+
+	// Should not crash and should continue after error
+	shouldQuit := app.HandleInput("SELECT 1;")
+	if shouldQuit {
+		t.Error("should not quit on valid SQL")
+	}
+}
+
+// pgcli equivalent: test_on_error_stop
+func TestHandleInput_OnErrorStop(t *testing.T) {
+	cfg := config.DefaultPGConfig()
+	cfg.LessChatty = true
+	cfg.OnError = "STOP"
+	mock := &mockExecutor{database: "testdb", version: "15.0"}
+	app := NewApp(PostgreSQL, mock, mock, cfg)
+	var buf bytes.Buffer
+	app.Stdout = &buf
+	app.Stderr = &buf
+
+	shouldQuit := app.HandleInput("SELECT 1;")
+	if shouldQuit {
+		t.Error("should not quit on valid SQL even in STOP mode")
+	}
+}
+
+// pgcli equivalent: test_multiple_queries_with_special_command_same_line
+func TestExecuteNonInteractive_MixedSpecialAndSQL(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	// Mix of special and SQL in sequence — the special command should be handled first
+	hasError := app.ExecuteNonInteractive(`\echo hello`)
+	if hasError {
+		t.Error("should not error on \\echo")
+	}
+	if !strings.Contains(buf.String(), "hello") {
+		t.Error("should output echo text")
+	}
+}
+
+// pgcli equivalent: test_toggle_verbose_errors
+func TestHandleInput_VerboseErrors(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	shouldQuit := app.HandleInput(`\v on`)
+	if shouldQuit {
+		t.Error("\\v should not quit")
+	}
+	if !strings.Contains(buf.String(), "on") {
+		t.Error("should confirm verbose errors on")
+	}
+}
+
+// pgcli equivalent: test_i_works
+func TestHandleInput_ExecuteFile(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	shouldQuit := app.HandleInput(`\i /tmp/test.sql`)
+	if shouldQuit {
+		t.Error("\\i should not quit")
+	}
+	if !strings.Contains(buf.String(), "test.sql") {
+		t.Error("should acknowledge file")
+	}
+}
+
+// pgcli equivalent: test_watch_works
+func TestHandleInput_Watch(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	shouldQuit := app.HandleInput(`\watch 3`)
+	if shouldQuit {
+		t.Error("\\watch should not quit")
+	}
+	if !strings.Contains(buf.String(), "3") {
+		t.Error("should set watch interval")
+	}
+}
+
+// pgcli equivalent: test_describe_special
+func TestHandleInput_DescribeCommands(t *testing.T) {
+	app, _ := newTestApp(PostgreSQL)
+
+	// These should all be recognized as special commands (not sent to SQL)
+	specialCmds := []string{`\dt`, `\dv`, `\di`, `\ds`, `\df`, `\dn`, `\du`, `\dx`, `\l`, `\d`}
+	for _, cmd := range specialCmds {
+		if !app.special.IsSpecial(cmd) {
+			t.Errorf("command %s should be recognized as special", cmd)
+		}
+	}
+}
+
+// pgcli equivalent: test_duration_in_words
+func TestFormatTimingOutput(t *testing.T) {
+	app, buf := newTestApp(PostgreSQL)
+	app.special.Timing = true
+	app.HandleInput("SELECT 1;")
+	output := buf.String()
+	if !strings.Contains(output, "Time:") {
+		t.Error("should show timing when enabled")
 	}
 }

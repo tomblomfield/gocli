@@ -211,6 +211,30 @@ func RegisterPG(r *Registry) {
 		ArgType:     ParsedQuery,
 		Handler:     pgListDomains,
 	})
+
+	// \c - Change database
+	r.Register(&Command{
+		Name:        `\c`,
+		Syntax:      `\c[onnect] database_name`,
+		Description: "Change to a new database",
+		ArgType:     RawQuery,
+		Aliases:     []string{`\connect`},
+		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+			if arg == "" {
+				return nil, fmt.Errorf("usage: \\c database_name")
+			}
+			return []*format.QueryResult{{StatusText: fmt.Sprintf("To change database, reconnect with: pgcli -d %s", arg)}}, nil
+		},
+	})
+
+	// \v - Toggle verbose errors
+	r.Register(&Command{
+		Name:        `\v`,
+		Syntax:      `\v [on|off]`,
+		Description: "Toggle verbose error reports",
+		ArgType:     RawQuery,
+		Handler:     pgVerboseErrors,
+	})
 }
 
 func getPGExecutor(executor interface{}) *pg.Executor {
@@ -649,6 +673,17 @@ func pgListDomains(ctx context.Context, executor interface{}, pattern string, ve
 	query += ` ORDER BY 1, 2`
 
 	return []*format.QueryResult{execPGQuery(ctx, e, query)}, nil
+}
+
+func pgVerboseErrors(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+	// This is a display-only toggle; actual verbose SQLSTATE is always included by pgx
+	state := "toggled"
+	if arg == "on" {
+		state = "on"
+	} else if arg == "off" {
+		state = "off"
+	}
+	return []*format.QueryResult{{StatusText: fmt.Sprintf("Verbose errors %s.", state)}}, nil
 }
 
 func execPGQuery(ctx context.Context, e *pg.Executor, query string) *format.QueryResult {

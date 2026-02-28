@@ -40,23 +40,25 @@ type CommandHandler func(ctx context.Context, executor interface{}, arg string, 
 type Registry struct {
 	commands map[string]*Command
 	// Shared state
-	Expanded  bool
-	Timing    bool
-	Pager     string
-	Editor    string
-	WatchSecs int
-	Favorites map[string]string
+	Expanded    bool
+	Timing      bool
+	Pager       string
+	Editor      string
+	WatchSecs   int
+	TableFormat string
+	Favorites   map[string]string
 }
 
 // NewRegistry creates a new command registry with common commands.
 func NewRegistry() *Registry {
 	r := &Registry{
-		commands:   make(map[string]*Command),
-		Timing:     true,
-		Pager:      os.Getenv("PAGER"),
-		Editor:     getEditor(),
-		WatchSecs:  2,
-		Favorites:  make(map[string]string),
+		commands:    make(map[string]*Command),
+		Timing:      true,
+		Pager:       os.Getenv("PAGER"),
+		Editor:      getEditor(),
+		WatchSecs:   2,
+		TableFormat: "unicode",
+		Favorites:   make(map[string]string),
 	}
 	r.registerCommon()
 	return r
@@ -289,6 +291,121 @@ func (r *Registry) registerCommon() {
 		Aliases:     []string{`\refresh`, "rehash"},
 		Handler: func(_ context.Context, _ interface{}, _ string, _ bool) ([]*format.QueryResult, error) {
 			return []*format.QueryResult{{StatusText: "Auto-completions refreshed."}}, nil
+		},
+	})
+
+	// \T - Change table format
+	r.Register(&Command{
+		Name:        `\t`,
+		Syntax:      `\T [format]`,
+		Description: "Change the table format used to output results",
+		ArgType:     RawQuery,
+		Aliases:     []string{`\t`},
+		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+			if arg == "" {
+				return []*format.QueryResult{{StatusText: fmt.Sprintf("Current table format: %s", r.TableFormat)}}, nil
+			}
+			validFormats := map[string]bool{
+				"ascii": true, "unicode": true, "psql": true,
+				"csv": true, "tsv": true, "json": true, "vertical": true,
+			}
+			if !validFormats[arg] {
+				return nil, fmt.Errorf("unknown table format: %s (valid: ascii, unicode, csv, tsv, json, vertical)", arg)
+			}
+			r.TableFormat = arg
+			return []*format.QueryResult{{StatusText: fmt.Sprintf("Changed table format to %s.", arg)}}, nil
+		},
+	})
+
+	// \echo - Echo a string to stdout
+	r.Register(&Command{
+		Name:        `\echo`,
+		Syntax:      `\echo [string]`,
+		Description: "Echo a string to stdout",
+		ArgType:     RawQuery,
+		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+			return []*format.QueryResult{{StatusText: arg}}, nil
+		},
+	})
+
+	// \pset - Set output parameters
+	r.Register(&Command{
+		Name:        `\pset`,
+		Syntax:      `\pset [key] [value]`,
+		Description: "Set table output option",
+		ArgType:     RawQuery,
+		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+			parts := strings.Fields(arg)
+			if len(parts) == 0 {
+				return []*format.QueryResult{{StatusText: fmt.Sprintf("format = %s\nexpanded = %v\ntiming = %v", r.TableFormat, r.Expanded, r.Timing)}}, nil
+			}
+			key := strings.ToLower(parts[0])
+			val := ""
+			if len(parts) > 1 {
+				val = parts[1]
+			}
+			switch key {
+			case "format":
+				if val != "" {
+					r.TableFormat = val
+				}
+				return []*format.QueryResult{{StatusText: fmt.Sprintf("Output format is %s.", r.TableFormat)}}, nil
+			case "expanded":
+				if val == "on" {
+					r.Expanded = true
+				} else if val == "off" {
+					r.Expanded = false
+				} else {
+					r.Expanded = !r.Expanded
+				}
+				state := "off"
+				if r.Expanded {
+					state = "on"
+				}
+				return []*format.QueryResult{{StatusText: fmt.Sprintf("Expanded display is %s.", state)}}, nil
+			default:
+				return nil, fmt.Errorf("unknown pset option: %s", key)
+			}
+		},
+	})
+
+	// \n - Named queries (pgcli-compatible aliases)
+	r.Register(&Command{
+		Name:        `\n`,
+		Syntax:      `\n[+] [name] [param1 param2 ...]`,
+		Description: "List or execute named queries",
+		ArgType:     RawQuery,
+		Handler:     r.favoritesHandler,
+	})
+	r.Register(&Command{
+		Name:        `\ns`,
+		Syntax:      `\ns name query`,
+		Description: "Save a named query",
+		ArgType:     RawQuery,
+		Handler:     r.saveFavoriteHandler,
+	})
+	r.Register(&Command{
+		Name:        `\nd`,
+		Syntax:      `\nd name`,
+		Description: "Delete a named query",
+		ArgType:     RawQuery,
+		Handler:     r.deleteFavoriteHandler,
+	})
+	r.Register(&Command{
+		Name:        `\np`,
+		Syntax:      `\np name`,
+		Description: "Print a named query",
+		ArgType:     RawQuery,
+		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+			name := strings.TrimSpace(arg)
+			if name == "" {
+				return nil, fmt.Errorf("usage: \\np name")
+			}
+			query, ok := r.Favorites[name]
+			if !ok {
+				return nil, fmt.Errorf("named query '%s' not found", name)
+			}
+			return []*format.QueryResult{{StatusText: query}}, nil
 		},
 	})
 }

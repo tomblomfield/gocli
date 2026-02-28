@@ -73,6 +73,13 @@ func NewApp(mode DBMode, executor Executor, meta MetadataProvider, cfg *config.C
 	reg.Timing = cfg.Timing
 	reg.Pager = cfg.Pager
 
+	switch mode {
+	case PostgreSQL:
+		special.RegisterPG(reg)
+	case MySQL:
+		special.RegisterMySQL(reg)
+	}
+
 	compMeta := completion.NewMetadata()
 	comp := completion.NewCompleter(compMeta, cfg.SmartCompletion)
 	comp.SetKeywordCasing(cfg.KeywordCasing)
@@ -384,6 +391,60 @@ func (a *App) GetContinuationPrompt() string {
 		return a.config.PromptContinuation
 	}
 	return "-> "
+}
+
+// ExecuteNonInteractive runs one or more statements (split by semicolons) and
+// prints results using the configured table format. It handles both special
+// commands and SQL queries, matching what `-e` should do. Returns true if any
+// statement produced an error.
+func (a *App) ExecuteNonInteractive(input string) bool {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return false
+	}
+
+	// Special commands are not split on semicolons
+	if a.special.IsSpecial(input) {
+		results, err := a.special.Execute(context.Background(), a.executor, input)
+		if err != nil {
+			fmt.Fprintf(a.Stderr, "Error: %s\n", err)
+			return true
+		}
+		a.displayResults(results, false)
+		return false
+	}
+
+	hasError := false
+	queries := SplitStatements(input)
+	for _, query := range queries {
+		query = strings.TrimSpace(query)
+		if query == "" {
+			continue
+		}
+
+		// Check if this individual statement is a special command
+		if a.special.IsSpecial(query) {
+			results, err := a.special.Execute(context.Background(), a.executor, query)
+			if err != nil {
+				fmt.Fprintf(a.Stderr, "Error: %s\n", err)
+				hasError = true
+				continue
+			}
+			a.displayResults(results, false)
+			continue
+		}
+
+		result, err := a.executor.Execute(context.Background(), query)
+		if err != nil {
+			fmt.Fprintf(a.Stderr, "Error: %s\n", err)
+			hasError = true
+			continue
+		}
+		if result != nil {
+			a.displayResults([]*format.QueryResult{result}, false)
+		}
+	}
+	return hasError
 }
 
 // HighlightInput applies syntax highlighting to input text.

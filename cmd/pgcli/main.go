@@ -15,7 +15,6 @@ import (
 	"github.com/tomblomfield/gocli/internal/cli"
 	"github.com/tomblomfield/gocli/internal/config"
 	"github.com/tomblomfield/gocli/internal/pg"
-	"github.com/tomblomfield/gocli/internal/special"
 )
 
 var (
@@ -149,29 +148,6 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Execute mode
-	if *execute != "" {
-		queries := cli.SplitStatements(*execute)
-		hasError := false
-		for _, query := range queries {
-			result, err := executor.Execute(context.Background(), query)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %s\n", err)
-				hasError = true
-				continue
-			}
-			if result != nil && len(result.Columns) > 0 {
-				for _, row := range result.Rows {
-					fmt.Println(strings.Join(row, "|"))
-				}
-			}
-		}
-		if hasError {
-			os.Exit(1)
-		}
-		os.Exit(0)
-	}
-
 	// Init command
 	if *initCmd != "" {
 		if _, err := executor.Execute(context.Background(), *initCmd); err != nil {
@@ -179,12 +155,16 @@ func main() {
 		}
 	}
 
-	// Register PG special commands
-	reg := special.NewRegistry()
-	special.RegisterPG(reg)
-
-	// Create and run app
+	// Create app (used by both -e mode and interactive mode)
 	app := cli.NewApp(cli.PostgreSQL, executor, executor, cfg)
+
+	// Execute mode
+	if *execute != "" {
+		if app.ExecuteNonInteractive(*execute) {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 
 	if !cfg.LessChatty {
 		ver, _ := executor.ServerVersion()
