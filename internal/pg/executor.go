@@ -346,17 +346,63 @@ func pluralS(n int) string {
 
 // Schema metadata queries
 
+// SearchPath returns the current search_path schemas.
+func (e *Executor) SearchPath(ctx context.Context) ([]string, error) {
+	rows, err := e.db.QueryContext(ctx, "SELECT unnest(current_schemas(true))")
+	if err != nil {
+		return []string{"public"}, nil
+	}
+	defer rows.Close()
+	var schemas []string
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err == nil {
+			schemas = append(schemas, s)
+		}
+	}
+	if len(schemas) == 0 {
+		return []string{"public"}, nil
+	}
+	return schemas, nil
+}
+
 // Tables returns all table names in the given schema (or all schemas if empty).
+// Tables on the search_path are returned without schema prefix.
 func (e *Executor) Tables(ctx context.Context, schema string) ([]string, error) {
-	query := `SELECT table_schema || '.' || table_name
+	if schema != "" {
+		query := `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 ORDER BY table_name`
+		return e.queryStrings(ctx, query, schema)
+	}
+
+	searchPath, _ := e.SearchPath(ctx)
+	spSet := make(map[string]bool)
+	for _, s := range searchPath {
+		spSet[s] = true
+	}
+
+	query := `SELECT table_schema, table_name
 		FROM information_schema.tables
 		WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
 		ORDER BY table_schema, table_name`
-	if schema != "" {
-		query = `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 ORDER BY table_name`
-		return e.queryStrings(ctx, query, schema)
+	rows, err := e.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
 	}
-	return e.queryStrings(ctx, query)
+	defer rows.Close()
+
+	var results []string
+	for rows.Next() {
+		var tableSchema, tableName string
+		if err := rows.Scan(&tableSchema, &tableName); err != nil {
+			return nil, err
+		}
+		if spSet[tableSchema] {
+			results = append(results, tableName)
+		} else {
+			results = append(results, tableSchema+"."+tableName)
+		}
+	}
+	return results, rows.Err()
 }
 
 // Columns returns all column names for the given table.
