@@ -129,7 +129,13 @@ func sortByMatchQuality(suggestions []Suggestion, word string) {
 	sort.SliceStable(suggestions, func(i, j int) bool {
 		si := matchScore(suggestions[i].Text, wordLower)
 		sj := matchScore(suggestions[j].Text, wordLower)
-		return si < sj
+		if si != sj {
+			return si < sj
+		}
+		// Same score: prefer shorter names (more relevant)
+		ni := len(nameAfterDot(suggestions[i].Text))
+		nj := len(nameAfterDot(suggestions[j].Text))
+		return ni < nj
 	})
 }
 
@@ -316,10 +322,10 @@ func (c *Completer) contextCompletions(ctx SQLContext, word string) []Suggestion
 		suggestions = append(suggestions, c.columnSuggestions(ctx, word)...)
 
 	case ctx.InFrom, ctx.InJoin:
-		suggestions = append(suggestions, c.keywordSuggestions(word, fromKeywords)...)
 		suggestions = append(suggestions, c.tableSuggestions(word)...)
 		suggestions = append(suggestions, c.viewSuggestions(word)...)
 		suggestions = append(suggestions, c.schemaSuggestions(word)...)
+		suggestions = append(suggestions, c.keywordSuggestions(word, fromKeywords)...)
 
 	case ctx.InWhere, ctx.InHaving, ctx.InOn:
 		suggestions = append(suggestions, c.keywordSuggestions(word, whereKeywords)...)
