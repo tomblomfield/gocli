@@ -219,7 +219,26 @@ func runREPL(app *cli.App, cfg *config.Config) {
 		return s
 	}
 
-	opts := []goprompt.Option{
+	shouldQuit := false
+
+	executor := func(input string) {
+		input = strings.TrimSpace(input)
+		if input == "" {
+			return
+		}
+		if app.HandleInput(input) {
+			shouldQuit = true
+		}
+	}
+
+	p := goprompt.New(
+		executor,
+		completer,
+		goprompt.OptionPrefix(app.GetPrompt()),
+		goprompt.OptionLivePrefix(func() (string, bool) {
+			return app.GetPrompt(), true
+		}),
+		goprompt.OptionTitle("gocli"),
 		goprompt.OptionPrefixTextColor(goprompt.Cyan),
 		goprompt.OptionSuggestionBGColor(goprompt.DarkGray),
 		goprompt.OptionSuggestionTextColor(goprompt.White),
@@ -230,22 +249,13 @@ func runREPL(app *cli.App, cfg *config.Config) {
 		goprompt.OptionSelectedDescriptionBGColor(goprompt.Blue),
 		goprompt.OptionSelectedDescriptionTextColor(goprompt.White),
 		goprompt.OptionMaxSuggestion(10),
-	}
+		goprompt.OptionCompletionOnDown(),
+		goprompt.OptionSetExitCheckerOnInput(func(in string, breakline bool) bool {
+			return shouldQuit
+		}),
+	)
 
-	for {
-		input := goprompt.Input(
-			app.GetPrompt(),
-			completer,
-			opts...,
-		)
-		input = strings.TrimSpace(input)
-		if input == "" {
-			continue
-		}
-		if app.HandleInput(input) {
-			break
-		}
-	}
+	p.Run()
 }
 
 func runBasicREPL(app *cli.App, cfg *config.Config) {
