@@ -11,6 +11,13 @@ import (
 	"unicode/utf8"
 )
 
+// ANSI color codes for table output
+const (
+	colorReset  = "\033[0m"
+	colorGreen  = "\033[32m"
+	colorBold   = "\033[1m"
+)
+
 // OutputFormat specifies the output format type.
 type OutputFormat string
 
@@ -198,14 +205,14 @@ func formatTable(w io.Writer, result *QueryResult, opts Options) error {
 
 	// Helper to write a border line
 	writeBorderLine := func(left, mid, right, horiz string) {
-		fmt.Fprint(w, left)
+		fmt.Fprint(w, colorGreen, left)
 		for i, width := range widths {
 			fmt.Fprint(w, strings.Repeat(horiz, width+2))
 			if i < len(widths)-1 {
 				fmt.Fprint(w, mid)
 			}
 		}
-		fmt.Fprintln(w, right)
+		fmt.Fprintln(w, right, colorReset)
 	}
 
 	// Top border (skip if empty, e.g. psql style)
@@ -213,27 +220,31 @@ func formatTable(w io.Writer, result *QueryResult, opts Options) error {
 		writeBorderLine(b.TopLeft, b.TopMid, b.TopRight, b.Horizontal)
 	}
 
-	// Header
-	fmt.Fprint(w, b.Vertical)
+	// Header (green + bold)
+	fmt.Fprint(w, colorGreen, colorBold, b.Vertical)
 	for i, col := range result.Columns {
 		fmt.Fprintf(w, " %s ", padRight(col, widths[i]))
 		fmt.Fprint(w, b.Vertical)
 	}
-	fmt.Fprintln(w)
+	fmt.Fprintln(w, colorReset)
 
 	// Header separator
 	writeBorderLine(b.MidLeft, b.MidMid, b.MidRight, b.HeaderHorizontal)
 
 	// Data rows
 	for _, row := range result.Rows {
-		fmt.Fprint(w, b.Vertical)
+		fmt.Fprint(w, colorGreen, b.Vertical, colorReset)
 		for i := range result.Columns {
 			cell := ""
 			if i < len(row) {
 				cell = row[i]
 			}
-			fmt.Fprintf(w, " %s ", padRight(cell, widths[i]))
-			fmt.Fprint(w, b.Vertical)
+			if cell == opts.NullValue {
+				fmt.Fprintf(w, " %s%s%s ", colorGreen, padRight(cell, widths[i]), colorReset)
+			} else {
+				fmt.Fprintf(w, " %s ", padRight(cell, widths[i]))
+			}
+			fmt.Fprint(w, colorGreen, b.Vertical, colorReset)
 		}
 		fmt.Fprintln(w)
 	}
