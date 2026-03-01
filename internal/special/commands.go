@@ -123,10 +123,15 @@ func extractCommand(input string) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	cmd := strings.ToLower(parts[0])
+	cmd := parts[0]
 	// Handle \d+ style (strip trailing +)
 	if strings.HasPrefix(cmd, `\`) && strings.HasSuffix(cmd, "+") && len(cmd) > 2 {
 		cmd = cmd[:len(cmd)-1]
+	}
+	// Only lowercase non-backslash commands (quit, exit, etc.)
+	// Backslash commands are case-sensitive (\dt != \dT)
+	if !strings.HasPrefix(cmd, `\`) {
+		cmd = strings.ToLower(cmd)
 	}
 	return cmd
 }
@@ -143,7 +148,10 @@ func parseSpecialCommand(input string) (cmd, arg string, verbose bool) {
 		cmd = cmd[:len(cmd)-1]
 		verbose = true
 	}
-	cmd = strings.ToLower(cmd)
+	// Only lowercase non-backslash commands
+	if !strings.HasPrefix(cmd, `\`) {
+		cmd = strings.ToLower(cmd)
+	}
 	return
 }
 
@@ -296,11 +304,10 @@ func (r *Registry) registerCommon() {
 
 	// \T - Change table format
 	r.Register(&Command{
-		Name:        `\t`,
+		Name:        `\T`,
 		Syntax:      `\T [format]`,
 		Description: "Change the table format used to output results",
 		ArgType:     RawQuery,
-		Aliases:     []string{`\t`},
 		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
 			if arg == "" {
 				return []*format.QueryResult{{StatusText: fmt.Sprintf("Current table format: %s", r.TableFormat)}}, nil

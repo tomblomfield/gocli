@@ -430,7 +430,7 @@ func TestExecute_TableFormat(t *testing.T) {
 	}
 
 	// Change to ascii
-	results, err := r.Execute(context.Background(), nil, `\t ascii`)
+	results, err := r.Execute(context.Background(), nil, `\T ascii`)
 	if err != nil {
 		t.Fatalf("\\T ascii should not error: %v", err)
 	}
@@ -442,13 +442,13 @@ func TestExecute_TableFormat(t *testing.T) {
 	}
 
 	// Invalid format
-	_, err = r.Execute(context.Background(), nil, `\t bogus`)
+	_, err = r.Execute(context.Background(), nil, `\T bogus`)
 	if err == nil {
 		t.Error("invalid format should error")
 	}
 
 	// Show current format
-	results, err = r.Execute(context.Background(), nil, `\t`)
+	results, err = r.Execute(context.Background(), nil, `\T`)
 	if err != nil {
 		t.Fatalf("\\T with no arg should not error: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestRegisterPG_Commands(t *testing.T) {
 	pgCommands := []string{
 		`\dt`, `\dv`, `\di`, `\ds`, `\df`, `\dn`, `\du`,
 		`\l`, `\d`, `\dx`, `\db`, `\dp`, `\sf`, `\conninfo`,
-		`\h`, `\i`, `\o`, `\copy`, `\dm`, `\dd`, `\c`, `\v`,
+		`\h`, `\i`, `\o`, `\copy`, `\dm`, `\dD`, `\c`, `\v`, `\dT`,
 	}
 
 	for _, cmd := range pgCommands {

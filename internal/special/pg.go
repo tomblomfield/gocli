@@ -103,11 +103,10 @@ func RegisterPG(r *Registry) {
 
 	// \dT - List data types (case-sensitive, distinct from \dt)
 	r.Register(&Command{
-		Name:        `\dtt`,
+		Name:        `\dT`,
 		Syntax:      `\dT[+] [pattern]`,
 		Description: "List data types",
 		ArgType:     ParsedQuery,
-		Hidden:      true,
 		Handler:     pgListTypes,
 	})
 
@@ -205,7 +204,7 @@ func RegisterPG(r *Registry) {
 
 	// \dD - List domains
 	r.Register(&Command{
-		Name:        `\dd`,
+		Name:        `\dD`,
 		Syntax:      `\dD[+] [pattern]`,
 		Description: "List domains",
 		ArgType:     ParsedQuery,
