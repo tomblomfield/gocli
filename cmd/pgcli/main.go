@@ -206,18 +206,6 @@ func runREPL(app *cli.App, cfg *config.Config) {
 		return
 	}
 
-	quit := false
-
-	executor := func(input string) {
-		input = strings.TrimSpace(input)
-		if input == "" {
-			return
-		}
-		if app.HandleInput(input) {
-			quit = true
-		}
-	}
-
 	completer := func(d goprompt.Document) []goprompt.Suggest {
 		text := d.TextBeforeCursor()
 		suggestions := app.Complete(text, len(text))
@@ -231,14 +219,7 @@ func runREPL(app *cli.App, cfg *config.Config) {
 		return s
 	}
 
-	p := goprompt.New(
-		executor,
-		completer,
-		goprompt.OptionPrefix(app.GetPrompt()),
-		goprompt.OptionLivePrefix(func() (string, bool) {
-			return app.GetPrompt(), true
-		}),
-		goprompt.OptionTitle("gocli"),
+	opts := []goprompt.Option{
 		goprompt.OptionPrefixTextColor(goprompt.Cyan),
 		goprompt.OptionSuggestionBGColor(goprompt.DarkGray),
 		goprompt.OptionSuggestionTextColor(goprompt.White),
@@ -249,16 +230,21 @@ func runREPL(app *cli.App, cfg *config.Config) {
 		goprompt.OptionSelectedDescriptionBGColor(goprompt.Blue),
 		goprompt.OptionSelectedDescriptionTextColor(goprompt.White),
 		goprompt.OptionMaxSuggestion(10),
-		goprompt.OptionCompletionOnDown(),
-		goprompt.OptionAddKeyBind(goprompt.KeyBind{
-			Key: goprompt.ControlC,
-			Fn:  func(*goprompt.Buffer) { quit = true },
-		}),
-	)
+	}
 
-	for !quit {
-		p.Run()
-		break
+	for {
+		input := goprompt.Input(
+			app.GetPrompt(),
+			completer,
+			opts...,
+		)
+		input = strings.TrimSpace(input)
+		if input == "" {
+			continue
+		}
+		if app.HandleInput(input) {
+			break
+		}
 	}
 }
 
