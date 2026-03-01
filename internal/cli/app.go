@@ -135,7 +135,10 @@ func (a *App) RefreshCompletions() {
 
 	// Add special commands
 	for _, cmd := range a.special.Commands() {
-		meta.Specials = append(meta.Specials, cmd.Name)
+		meta.Specials = append(meta.Specials, completion.SpecialCmd{
+			Name:        cmd.Name,
+			Description: cmd.Description,
+		})
 	}
 
 	// Add favorites

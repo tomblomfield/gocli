@@ -264,7 +264,7 @@ func (c *Config) parse(f *os.File) error {
 			continue
 		}
 		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
+		value := stripQuotes(strings.TrimSpace(parts[1]))
 
 		switch section {
 		case "main", "":
@@ -343,6 +343,15 @@ func (c *Config) parseMainOption(key, value string) {
 	case "destructive_keywords":
 		c.DestructiveKeywords = strings.Fields(value)
 	}
+}
+
+func stripQuotes(s string) string {
+	if len(s) >= 2 {
+		if (s[0] == '\'' && s[len(s)-1] == '\'') || (s[0] == '"' && s[len(s)-1] == '"') {
+			return s[1 : len(s)-1]
+		}
+	}
+	return s
 }
 
 func parseBool(s string) bool {

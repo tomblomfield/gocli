@@ -19,7 +19,11 @@ func testMetadata() *Metadata {
 	meta.Schemas = []string{"public", "auth", "billing"}
 	meta.Databases = []string{"mydb", "testdb", "production"}
 	meta.Datatypes = []string{"integer", "text", "boolean", "timestamp", "jsonb", "uuid"}
-	meta.Specials = []string{`\dt`, `\di`, `\dv`, `\df`, `\dn`, `\du`, `\l`, `\x`, `\q`}
+	meta.Specials = []SpecialCmd{
+		{`\dt`, "List tables"}, {`\di`, "List indexes"}, {`\dv`, "List views"},
+		{`\df`, "List functions"}, {`\dn`, "List schemas"}, {`\du`, "List roles"},
+		{`\l`, "List databases"}, {`\x`, "Toggle expanded"}, {`\q`, "Quit"},
+	}
 	meta.Favorites = []string{"active_users_query", "daily_report"}
 	return meta
 }

@@ -31,6 +31,12 @@ type Suggestion struct {
 	Description string
 }
 
+// SpecialCmd holds a special command name and its description.
+type SpecialCmd struct {
+	Name        string
+	Description string
+}
+
 // Metadata holds database schema information for completions.
 type Metadata struct {
 	Tables    []string
@@ -40,7 +46,7 @@ type Metadata struct {
 	Schemas   []string
 	Databases []string
 	Datatypes []string
-	Specials  []string
+	Specials  []SpecialCmd
 	Favorites []string
 }
 
@@ -231,9 +237,9 @@ func (c *Completer) contextCompletions(ctx SQLContext, word string) []Suggestion
 
 	if ctx.IsBackslash {
 		for _, s := range c.meta.Specials {
-			if fuzzyMatch(word, s) {
+			if fuzzyMatch(word, s.Name) {
 				suggestions = append(suggestions, Suggestion{
-					Text: s, Type: SuggestSpecial, Description: "special command",
+					Text: s.Name, Type: SuggestSpecial, Description: s.Description,
 				})
 			}
 		}
@@ -309,8 +315,8 @@ func (c *Completer) allCompletions(word string) []Suggestion {
 	suggestions = append(suggestions, c.schemaSuggestions(word)...)
 	suggestions = append(suggestions, c.datatypeSuggestions(word)...)
 	for _, s := range c.meta.Specials {
-		if fuzzyMatch(word, s) {
-			suggestions = append(suggestions, Suggestion{Text: s, Type: SuggestSpecial})
+		if fuzzyMatch(word, s.Name) {
+			suggestions = append(suggestions, Suggestion{Text: s.Name, Type: SuggestSpecial, Description: s.Description})
 		}
 	}
 	for _, f := range c.meta.Favorites {
