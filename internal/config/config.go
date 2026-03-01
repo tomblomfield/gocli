@@ -70,6 +70,7 @@ func DefaultPGConfig() *Config {
 		KeyBindings:      "emacs",
 		Timing:           true,
 		EnablePager:      true,
+		Pager:            "less -SRXF",
 		TableFormat:      "psql",
 		SyntaxStyle:      "default",
 		OnError:          "STOP",
