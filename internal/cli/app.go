@@ -277,7 +277,9 @@ func (a *App) displayResults(results []*format.QueryResult, forceVertical bool) 
 			switch a.config.TableFormat {
 			case "ascii":
 				opts.Style = format.ASCIIStyle
-			case "unicode", "psql":
+			case "psql":
+				opts.Style = format.PsqlStyle
+			case "unicode":
 				opts.Style = format.UnicodeStyle
 			case "csv":
 				opts.Format = format.CSVFormat

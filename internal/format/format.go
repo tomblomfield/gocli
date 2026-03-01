@@ -27,8 +27,9 @@ const (
 type TableStyle string
 
 const (
-	ASCIIStyle      TableStyle = "ascii"
-	UnicodeStyle    TableStyle = "unicode"
+	ASCIIStyle       TableStyle = "ascii"
+	PsqlStyle        TableStyle = "psql"
+	UnicodeStyle     TableStyle = "unicode"
 	UnicodeFullStyle TableStyle = "unicode_full"
 )
 
@@ -122,10 +123,22 @@ func unicodeFullBorders() borders {
 	}
 }
 
+func psqlBorders() borders {
+	return borders{
+		TopLeft: "", TopMid: "", TopRight: "",
+		MidLeft: "|", MidMid: "+", MidRight: "|",
+		BotLeft: "", BotMid: "", BotRight: "",
+		Horizontal: "-", Vertical: "|",
+		HeaderHorizontal: "-",
+	}
+}
+
 func getBorders(style TableStyle) borders {
 	switch style {
 	case ASCIIStyle:
 		return asciiBorders()
+	case PsqlStyle:
+		return psqlBorders()
 	case UnicodeFullStyle:
 		return unicodeFullBorders()
 	default:
@@ -195,8 +208,10 @@ func formatTable(w io.Writer, result *QueryResult, opts Options) error {
 		fmt.Fprintln(w, right)
 	}
 
-	// Top border
-	writeBorderLine(b.TopLeft, b.TopMid, b.TopRight, b.Horizontal)
+	// Top border (skip if empty, e.g. psql style)
+	if b.TopLeft != "" {
+		writeBorderLine(b.TopLeft, b.TopMid, b.TopRight, b.Horizontal)
+	}
 
 	// Header
 	fmt.Fprint(w, b.Vertical)
@@ -223,8 +238,10 @@ func formatTable(w io.Writer, result *QueryResult, opts Options) error {
 		fmt.Fprintln(w)
 	}
 
-	// Bottom border
-	writeBorderLine(b.BotLeft, b.BotMid, b.BotRight, b.Horizontal)
+	// Bottom border (skip if empty, e.g. psql style)
+	if b.BotLeft != "" {
+		writeBorderLine(b.BotLeft, b.BotMid, b.BotRight, b.Horizontal)
+	}
 
 	return nil
 }
