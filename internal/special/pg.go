@@ -101,9 +101,9 @@ func RegisterPG(r *Registry) {
 		Handler:     pgListExtensions,
 	})
 
-	// \dT - List data types
+	// \dT - List data types (case-sensitive, distinct from \dt)
 	r.Register(&Command{
-		Name:        `\dt`,
+		Name:        `\dtt`,
 		Syntax:      `\dT[+] [pattern]`,
 		Description: "List data types",
 		ArgType:     ParsedQuery,
@@ -269,7 +269,7 @@ func pgListTables(ctx context.Context, executor interface{}, pattern string, ver
 		AND n.nspname !~ '^pg_toast'`
 
 	if pattern != "" {
-		query += fmt.Sprintf(` AND c.relname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND c.relname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -296,7 +296,7 @@ func pgListViews(ctx context.Context, executor interface{}, pattern string, verb
 		AND n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 
 	if pattern != "" {
-		query += fmt.Sprintf(` AND c.relname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND c.relname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -326,7 +326,7 @@ func pgListIndexes(ctx context.Context, executor interface{}, pattern string, ve
 		AND n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 
 	if pattern != "" {
-		query += fmt.Sprintf(` AND c.relname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND c.relname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -352,7 +352,7 @@ func pgListSequences(ctx context.Context, executor interface{}, pattern string, 
 		AND n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 
 	if pattern != "" {
-		query += fmt.Sprintf(` AND c.relname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND c.relname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -380,7 +380,7 @@ func pgListFunctions(ctx context.Context, executor interface{}, pattern string, 
 		WHERE n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 
 	if pattern != "" {
-		query += fmt.Sprintf(` AND p.proname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND p.proname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -400,7 +400,7 @@ func pgListSchemas(ctx context.Context, executor interface{}, pattern string, ve
 	query += ` FROM pg_catalog.pg_namespace n
 		WHERE n.nspname !~ '^pg_' AND n.nspname <> 'information_schema'`
 	if pattern != "" {
-		query += fmt.Sprintf(` AND n.nspname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND n.nspname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1`
 
@@ -428,7 +428,7 @@ func pgListRoles(ctx context.Context, executor interface{}, pattern string, verb
 
 	query += ` FROM pg_catalog.pg_roles r`
 	if pattern != "" {
-		query += fmt.Sprintf(` WHERE r.rolname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` WHERE r.rolname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1`
 
@@ -454,7 +454,7 @@ func pgListDatabases(ctx context.Context, executor interface{}, pattern string, 
 
 	query += ` FROM pg_catalog.pg_database d`
 	if pattern != "" {
-		query += fmt.Sprintf(` WHERE d.datname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` WHERE d.datname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1`
 
@@ -504,7 +504,7 @@ func pgListExtensions(ctx context.Context, executor interface{}, pattern string,
 	query += ` FROM pg_catalog.pg_extension e
 		LEFT JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace`
 	if pattern != "" {
-		query += fmt.Sprintf(` WHERE e.extname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` WHERE e.extname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1`
 
@@ -527,7 +527,7 @@ func pgListTypes(ctx context.Context, executor interface{}, pattern string, verb
 		AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_type el WHERE el.oid = t.typelem AND el.typarray = t.oid)
 		AND n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 	if pattern != "" {
-		query += fmt.Sprintf(` AND pg_catalog.format_type(t.oid, NULL) ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND pg_catalog.format_type(t.oid, NULL) = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -548,7 +548,7 @@ func pgListTablespaces(ctx context.Context, executor interface{}, pattern string
 	}
 	query += ` FROM pg_catalog.pg_tablespace`
 	if pattern != "" {
-		query += fmt.Sprintf(` WHERE spcname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` WHERE spcname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1`
 
@@ -574,7 +574,7 @@ func pgListPrivileges(ctx context.Context, executor interface{}, pattern string,
 	WHERE c.relkind IN ('r','v','m','S','f')
 		AND n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 	if pattern != "" {
-		query += fmt.Sprintf(` AND c.relname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND c.relname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -642,7 +642,7 @@ func pgListMaterializedViews(ctx context.Context, executor interface{}, pattern 
 		WHERE c.relkind = 'm'
 		AND n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 	if pattern != "" {
-		query += fmt.Sprintf(` AND c.relname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND c.relname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
@@ -668,7 +668,7 @@ func pgListDomains(ctx context.Context, executor interface{}, pattern string, ve
 		WHERE t.typtype = 'd'
 		AND n.nspname <> 'pg_catalog' AND n.nspname <> 'information_schema'`
 	if pattern != "" {
-		query += fmt.Sprintf(` AND t.typname ~ '%s'`, pattern)
+		query += fmt.Sprintf(` AND t.typname = '%s'`, pattern)
 	}
 	query += ` ORDER BY 1, 2`
 
