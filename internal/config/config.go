@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds all configuration settings.
@@ -369,11 +370,31 @@ func boolStr(b bool) string {
 
 // FormatPrompt replaces prompt format tokens with actual values.
 func FormatPrompt(promptFmt string, user, host, database, port string, isSuperuser bool) string {
+	// Short host (truncate at first dot, but keep IP addresses intact)
+	shortHost := host
+	if dot := strings.Index(host, "."); dot > 0 {
+		// Check if it looks like an IP address
+		isIP := true
+		for _, ch := range host {
+			if ch != '.' && (ch < '0' || ch > '9') {
+				isIP = false
+				break
+			}
+		}
+		if !isIP {
+			shortHost = host[:dot]
+		}
+	}
+
+	now := time.Now()
+
 	r := strings.NewReplacer(
 		`\u`, user,
-		`\h`, host,
+		`\h`, shortHost,
+		`\H`, host,
 		`\d`, database,
 		`\p`, port,
+		`\t`, now.Format("15:04:05"),
 		`\n`, "\n",
 		`\_`, " ",
 	)

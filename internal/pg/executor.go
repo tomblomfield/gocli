@@ -441,6 +441,50 @@ func (e *Executor) Functions(ctx context.Context, schema string) ([]string, erro
 	return e.queryStrings(ctx, query)
 }
 
+// ForeignKey represents a foreign key relationship.
+type ForeignKey struct {
+	ParentSchema string
+	ParentTable  string
+	ParentColumn string
+	ChildSchema  string
+	ChildTable   string
+	ChildColumn  string
+}
+
+// ForeignKeys returns all foreign key relationships.
+func (e *Executor) ForeignKeys(ctx context.Context) ([]ForeignKey, error) {
+	query := `SELECT
+		cn.nspname AS child_schema, cc.relname AS child_table, ca.attname AS child_column,
+		pn.nspname AS parent_schema, pc.relname AS parent_table, pa.attname AS parent_column
+	FROM pg_constraint c
+	JOIN pg_class cc ON c.conrelid = cc.oid
+	JOIN pg_namespace cn ON cc.relnamespace = cn.oid
+	JOIN pg_class pc ON c.confrelid = pc.oid
+	JOIN pg_namespace pn ON pc.relnamespace = pn.oid
+	JOIN pg_attribute ca ON ca.attrelid = c.conrelid AND ca.attnum = ANY(c.conkey)
+	JOIN pg_attribute pa ON pa.attrelid = c.confrelid AND pa.attnum = ANY(c.confkey)
+	WHERE c.contype = 'f'
+	AND cn.nspname NOT IN ('pg_catalog', 'information_schema')
+	ORDER BY cn.nspname, cc.relname`
+
+	rows, err := e.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var fks []ForeignKey
+	for rows.Next() {
+		var fk ForeignKey
+		if err := rows.Scan(&fk.ChildSchema, &fk.ChildTable, &fk.ChildColumn,
+			&fk.ParentSchema, &fk.ParentTable, &fk.ParentColumn); err != nil {
+			return nil, err
+		}
+		fks = append(fks, fk)
+	}
+	return fks, rows.Err()
+}
+
 // Databases returns all database names.
 func (e *Executor) Databases(ctx context.Context) ([]string, error) {
 	query := `SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname`

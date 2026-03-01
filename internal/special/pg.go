@@ -228,6 +228,34 @@ func RegisterPG(r *Registry) {
 		},
 	})
 
+	// \ef - Edit function definition
+	r.Register(&Command{
+		Name:        `\ef`,
+		Syntax:      `\ef funcname`,
+		Description: "Edit function definition in external editor",
+		ArgType:     ParsedQuery,
+		Handler: func(_ context.Context, _ interface{}, name string, _ bool) ([]*format.QueryResult, error) {
+			if name == "" {
+				return nil, fmt.Errorf("function name required")
+			}
+			return []*format.QueryResult{{StatusText: fmt.Sprintf("Use \\sf %s to view the function, then \\e to edit", name)}}, nil
+		},
+	})
+
+	// \ev - Edit view definition
+	r.Register(&Command{
+		Name:        `\ev`,
+		Syntax:      `\ev viewname`,
+		Description: "Edit view definition in external editor",
+		ArgType:     ParsedQuery,
+		Handler: func(_ context.Context, _ interface{}, name string, _ bool) ([]*format.QueryResult, error) {
+			if name == "" {
+				return nil, fmt.Errorf("view name required")
+			}
+			return []*format.QueryResult{{StatusText: fmt.Sprintf("Use \\sv %s to view the definition, then \\e to edit", name)}}, nil
+		},
+	})
+
 	// \sv - Show view definition
 	r.Register(&Command{
 		Name:        `\sv`,

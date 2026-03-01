@@ -342,8 +342,10 @@ func TestFormatPrompt(t *testing.T) {
 		{`\u@\h:\d> `, "alice", "localhost", "mydb", "5432", false, "alice@localhost:mydb> "},
 		{`\u@\h:\d# `, "postgres", "server", "production", "5432", false, "postgres@server:production# "},
 		{`\d> `, "", "", "test", "", false, "test> "},
-		{`[\u@\h:\p/\d]\# `, "admin", "db.host", "mydb", "5433", true, "[admin@db.host:5433/mydb]@ "},
+		{`[\u@\H:\p/\d]\# `, "admin", "db.host", "mydb", "5433", true, "[admin@db.host:5433/mydb]@ "},
+		{`[\u@\h:\p/\d]\# `, "admin", "db.host", "mydb", "5433", true, "[admin@db:5433/mydb]@ "},
 		{`[\u@\h:\p/\d]\# `, "user", "host", "db", "5432", false, "[user@host:5432/db]> "},
+		{`\u@\h:\d> `, "user", "1.2.3.4", "db", "5432", false, "user@1.2.3.4:db> "},
 	}
 
 	for _, tt := range tests {

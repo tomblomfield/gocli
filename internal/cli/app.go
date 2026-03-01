@@ -338,8 +338,13 @@ func (a *App) getOutputWriter(result *format.QueryResult) io.Writer {
 		return a.Stdout
 	}
 
-	// Only use pager for results with data
+	// Only use pager for results that exceed terminal height
 	if len(result.Rows) == 0 {
+		return a.Stdout
+	}
+	termHeight := getTerminalHeight()
+	outputLines := len(result.Rows) + 3 // rows + header + separator + status
+	if termHeight > 0 && outputLines < termHeight {
 		return a.Stdout
 	}
 
@@ -614,4 +619,13 @@ func getTerminalWidth() int {
 		return 0
 	}
 	return int(ws.Col)
+}
+
+func getTerminalHeight() int {
+	ws := &winsize{}
+	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdout), uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(ws)))
+	if err != 0 || ws.Row == 0 {
+		return 0
+	}
+	return int(ws.Row)
 }
