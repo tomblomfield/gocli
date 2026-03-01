@@ -263,21 +263,21 @@ func (c *Completer) contextCompletions(ctx SQLContext, word string) []Suggestion
 
 	switch {
 	case ctx.InSelect:
-		suggestions = append(suggestions, c.columnSuggestions(ctx, word)...)
+		suggestions = append(suggestions, c.keywordSuggestions(word, selectKeywords)...)
 		suggestions = append(suggestions, c.functionSuggestions(word)...)
 		suggestions = append(suggestions, c.tableSuggestions(word)...)
-		suggestions = append(suggestions, c.keywordSuggestions(word, selectKeywords)...)
+		suggestions = append(suggestions, c.columnSuggestions(ctx, word)...)
 
 	case ctx.InFrom, ctx.InJoin:
+		suggestions = append(suggestions, c.keywordSuggestions(word, fromKeywords)...)
 		suggestions = append(suggestions, c.tableSuggestions(word)...)
 		suggestions = append(suggestions, c.viewSuggestions(word)...)
 		suggestions = append(suggestions, c.schemaSuggestions(word)...)
-		suggestions = append(suggestions, c.keywordSuggestions(word, fromKeywords)...)
 
 	case ctx.InWhere, ctx.InHaving, ctx.InOn:
+		suggestions = append(suggestions, c.keywordSuggestions(word, whereKeywords)...)
 		suggestions = append(suggestions, c.columnSuggestions(ctx, word)...)
 		suggestions = append(suggestions, c.functionSuggestions(word)...)
-		suggestions = append(suggestions, c.keywordSuggestions(word, whereKeywords)...)
 
 	case ctx.InOrderBy, ctx.InGroupBy:
 		suggestions = append(suggestions, c.columnSuggestions(ctx, word)...)
@@ -293,10 +293,10 @@ func (c *Completer) contextCompletions(ctx SQLContext, word string) []Suggestion
 		suggestions = append(suggestions, c.columnSuggestions(ctx, word)...)
 
 	case ctx.InCreate, ctx.InAlter, ctx.InDrop:
+		suggestions = append(suggestions, c.keywordSuggestions(word, ddlKeywords)...)
 		suggestions = append(suggestions, c.tableSuggestions(word)...)
 		suggestions = append(suggestions, c.schemaSuggestions(word)...)
 		suggestions = append(suggestions, c.datatypeSuggestions(word)...)
-		suggestions = append(suggestions, c.keywordSuggestions(word, ddlKeywords)...)
 
 	default:
 		suggestions = append(suggestions, c.allCompletions(word)...)
