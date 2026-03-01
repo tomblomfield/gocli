@@ -335,6 +335,28 @@ func (r *Registry) registerCommon() {
 		},
 	})
 
+	// \qecho - Echo to query output channel
+	r.Register(&Command{
+		Name:        `\qecho`,
+		Syntax:      `\qecho [string]`,
+		Description: "Echo a string to the query output channel",
+		ArgType:     RawQuery,
+		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+			return []*format.QueryResult{{StatusText: arg}}, nil
+		},
+	})
+
+	// \s - Display command history
+	r.Register(&Command{
+		Name:        `\s`,
+		Syntax:      `\s [filename]`,
+		Description: "Display or save command history",
+		ArgType:     RawQuery,
+		Handler: func(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+			return []*format.QueryResult{{StatusText: "History display not available in this mode. Use up/down arrows to navigate history."}}, nil
+		},
+	})
+
 	// \pset - Set output parameters
 	r.Register(&Command{
 		Name:        `\pset`,
@@ -476,7 +498,7 @@ func (r *Registry) shellHandler(_ context.Context, _ interface{}, arg string, _ 
 	return nil, nil
 }
 
-func (r *Registry) favoritesHandler(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
+func (r *Registry) favoritesHandler(_ context.Context, executor interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
 	if arg == "" {
 		// List all favorites
 		var rows [][]string
@@ -507,7 +529,20 @@ func (r *Registry) favoritesHandler(_ context.Context, _ interface{}, arg string
 		}
 	}
 
-	return []*format.QueryResult{{StatusText: fmt.Sprintf("Executing: %s", query)}}, nil
+	// Actually execute the query
+	if executor == nil {
+		return []*format.QueryResult{{StatusText: fmt.Sprintf("Query: %s", query)}}, nil
+	}
+	if e, ok := executor.(interface {
+		Execute(context.Context, string) (*format.QueryResult, error)
+	}); ok {
+		result, err := e.Execute(context.Background(), query)
+		if err != nil {
+			return nil, err
+		}
+		return []*format.QueryResult{result}, nil
+	}
+	return []*format.QueryResult{{StatusText: fmt.Sprintf("Query: %s", query)}}, nil
 }
 
 func (r *Registry) saveFavoriteHandler(_ context.Context, _ interface{}, arg string, _ bool) ([]*format.QueryResult, error) {

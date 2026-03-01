@@ -3,6 +3,8 @@ package special
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/tomblomfield/gocli/internal/format"
 	"github.com/tomblomfield/gocli/internal/pg"
@@ -224,6 +226,15 @@ func RegisterPG(r *Registry) {
 			}
 			return []*format.QueryResult{{StatusText: fmt.Sprintf("To change database, reconnect with: pgcli -d %s", arg)}}, nil
 		},
+	})
+
+	// \sv - Show view definition
+	r.Register(&Command{
+		Name:        `\sv`,
+		Syntax:      `\sv[+] viewname`,
+		Description: "Show view definition",
+		ArgType:     ParsedQuery,
+		Handler:     pgShowView,
 	})
 
 	// \v - Toggle verbose errors
@@ -608,12 +619,30 @@ func pgConnInfo(_ context.Context, executor interface{}, _ string, _ bool) ([]*f
 }
 
 func pgExecuteFile(ctx context.Context, executor interface{}, filename string, _ bool) ([]*format.QueryResult, error) {
-	_ = ctx
-	_ = executor
 	if filename == "" {
-		return nil, fmt.Errorf("filename required")
+		return nil, fmt.Errorf("missing required argument: filename")
 	}
-	return []*format.QueryResult{{StatusText: fmt.Sprintf("Executing file: %s", filename)}}, nil
+
+	data, err := os.ReadFile(strings.TrimSpace(filename))
+	if err != nil {
+		return nil, fmt.Errorf("%s", err)
+	}
+
+	e := getPGExecutor(executor)
+	if e == nil {
+		return nil, fmt.Errorf("not connected to PostgreSQL")
+	}
+
+	sql := strings.TrimSpace(string(data))
+	if sql == "" {
+		return []*format.QueryResult{{StatusText: "Empty file."}}, nil
+	}
+
+	result, err := e.Execute(ctx, sql)
+	if err != nil {
+		return nil, err
+	}
+	return []*format.QueryResult{result}, nil
 }
 
 func pgCopy(_ context.Context, executor interface{}, arg string, _ bool) ([]*format.QueryResult, error) {
@@ -671,6 +700,18 @@ func pgListDomains(ctx context.Context, executor interface{}, pattern string, ve
 	}
 	query += ` ORDER BY 1, 2`
 
+	return []*format.QueryResult{execPGQuery(ctx, e, query)}, nil
+}
+
+func pgShowView(ctx context.Context, executor interface{}, name string, _ bool) ([]*format.QueryResult, error) {
+	e := getPGExecutor(executor)
+	if e == nil {
+		return nil, fmt.Errorf("not connected to PostgreSQL")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("view name required")
+	}
+	query := fmt.Sprintf(`SELECT pg_catalog.pg_get_viewdef('%s'::regclass, true) AS "View definition"`, name)
 	return []*format.QueryResult{execPGQuery(ctx, e, query)}, nil
 }
 

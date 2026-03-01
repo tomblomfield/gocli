@@ -11,6 +11,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/tomblomfield/gocli/internal/completion"
 	"github.com/tomblomfield/gocli/internal/config"
@@ -293,6 +294,25 @@ func (a *App) displayResults(results []*format.QueryResult, forceVertical bool) 
 
 			if forceVertical || a.special.Expanded || a.config.ExpandedOutput {
 				opts.Expanded = true
+			}
+
+			// Auto-expand: switch to vertical if result is wider than terminal
+			if !opts.Expanded && a.config.AutoExpand && len(result.Columns) > 0 {
+				tableWidth := 1 // leading border
+				for _, col := range result.Columns {
+					w := len(col)
+					for _, row := range result.Rows {
+						for ci, cell := range row {
+							if ci < len(result.Columns) && len(cell) > w {
+								w = len(cell)
+							}
+						}
+					}
+					tableWidth += w + 3 // cell + padding + border
+				}
+				if termWidth := getTerminalWidth(); termWidth > 0 && tableWidth > termWidth {
+					opts.Expanded = true
+				}
 			}
 
 			format.Format(writer, result, opts)
@@ -578,4 +598,20 @@ func SplitStatements(input string) []string {
 	}
 
 	return statements
+}
+
+type winsize struct {
+	Row    uint16
+	Col    uint16
+	Xpixel uint16
+	Ypixel uint16
+}
+
+func getTerminalWidth() int {
+	ws := &winsize{}
+	_, _, err := syscall.Syscall(syscall.SYS_IOCTL, uintptr(syscall.Stdout), uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(ws)))
+	if err != 0 || ws.Col == 0 {
+		return 0
+	}
+	return int(ws.Col)
 }
