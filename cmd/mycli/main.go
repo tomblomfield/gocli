@@ -7,14 +7,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
-	"github.com/chzyer/readline"
+	goprompt "github.com/c-bata/go-prompt"
 	"github.com/tomblomfield/gocli/internal/cli"
 	"github.com/tomblomfield/gocli/internal/config"
-	"github.com/tomblomfield/gocli/internal/highlight"
 	"github.com/tomblomfield/gocli/internal/mysql"
 )
 
@@ -162,38 +160,65 @@ func main() {
 }
 
 func runREPL(app *cli.App, cfg *config.Config) {
-	historyFile := cfg.HistoryFile
-	if historyFile == "" {
-		home, _ := os.UserHomeDir()
-		historyFile = filepath.Join(home, ".config", "mycli", "history")
-		os.MkdirAll(filepath.Dir(historyFile), 0755)
-	}
-
-	style := highlight.GetStyle(cfg.SyntaxStyle)
-
-	rl, err := readline.NewEx(&readline.Config{
-		Prompt:          app.GetPrompt(),
-		HistoryFile:     historyFile,
-		InterruptPrompt: "^C",
-		EOFPrompt:       "\\q",
-		Painter:         &sqlPainter{style: style},
-	})
-	if err != nil {
+	fi, _ := os.Stdin.Stat()
+	if (fi.Mode() & os.ModeCharDevice) == 0 {
 		runBasicREPL(app, cfg)
 		return
 	}
-	defer rl.Close()
 
-	for {
-		rl.SetPrompt(app.GetPrompt())
-		input, err := rl.Readline()
-		if err != nil {
-			break
-		}
+	quit := false
 
-		if shouldQuit := app.HandleInput(input); shouldQuit {
-			break
+	executor := func(input string) {
+		input = strings.TrimSpace(input)
+		if input == "" {
+			return
 		}
+		if app.HandleInput(input) {
+			quit = true
+		}
+	}
+
+	completer := func(d goprompt.Document) []goprompt.Suggest {
+		text := d.TextBeforeCursor()
+		suggestions := app.Complete(text, len(text))
+		s := make([]goprompt.Suggest, 0, len(suggestions))
+		for _, sg := range suggestions {
+			s = append(s, goprompt.Suggest{
+				Text:        sg.Text,
+				Description: sg.Description,
+			})
+		}
+		return s
+	}
+
+	p := goprompt.New(
+		executor,
+		completer,
+		goprompt.OptionPrefix(app.GetPrompt()),
+		goprompt.OptionLivePrefix(func() (string, bool) {
+			return app.GetPrompt(), true
+		}),
+		goprompt.OptionTitle("gocli"),
+		goprompt.OptionPrefixTextColor(goprompt.Cyan),
+		goprompt.OptionSuggestionBGColor(goprompt.DarkGray),
+		goprompt.OptionSuggestionTextColor(goprompt.White),
+		goprompt.OptionSelectedSuggestionBGColor(goprompt.Blue),
+		goprompt.OptionSelectedSuggestionTextColor(goprompt.White),
+		goprompt.OptionDescriptionBGColor(goprompt.DarkGray),
+		goprompt.OptionDescriptionTextColor(goprompt.LightGray),
+		goprompt.OptionSelectedDescriptionBGColor(goprompt.Blue),
+		goprompt.OptionSelectedDescriptionTextColor(goprompt.White),
+		goprompt.OptionMaxSuggestion(10),
+		goprompt.OptionCompletionOnDown(),
+		goprompt.OptionAddKeyBind(goprompt.KeyBind{
+			Key: goprompt.ControlC,
+			Fn:  func(*goprompt.Buffer) { quit = true },
+		}),
+	)
+
+	for !quit {
+		p.Run()
+		break
 	}
 }
 
@@ -212,18 +237,6 @@ func runBasicREPL(app *cli.App, cfg *config.Config) {
 			break
 		}
 	}
-}
-
-type sqlPainter struct {
-	style highlight.Style
-}
-
-func (p *sqlPainter) Paint(line []rune, _ int) []rune {
-	if len(line) == 0 {
-		return line
-	}
-	highlighted := highlight.Highlight(string(line), p.style)
-	return []rune(highlighted)
 }
 
 func buildMySQLConfig(cfg *config.Config) mysql.ConnectionConfig {
