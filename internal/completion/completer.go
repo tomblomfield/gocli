@@ -135,16 +135,31 @@ func sortByMatchQuality(suggestions []Suggestion, word string) {
 
 func matchScore(candidate, wordLower string) int {
 	candidateLower := strings.ToLower(candidate)
-	if candidateLower == wordLower {
-		return 0 // exact match
+	nameLower := strings.ToLower(nameAfterDot(candidate))
+
+	// Check both full name and name-after-dot, take the best score
+	best := 4
+	for _, cl := range []string{candidateLower, nameLower} {
+		score := 4
+		if cl == wordLower {
+			score = 0 // exact match
+		} else if strings.HasPrefix(cl, wordLower) {
+			score = 1 // prefix match
+		} else if strings.Contains(cl, wordLower) {
+			score = 3 // substring match
+		}
+		if score < best {
+			best = score
+		}
 	}
-	if strings.HasPrefix(candidateLower, wordLower) {
-		return 1 // prefix match
+	return best
+}
+
+func nameAfterDot(s string) string {
+	if i := strings.LastIndex(s, "."); i >= 0 {
+		return s[i+1:]
 	}
-	if strings.Contains(candidateLower, wordLower) {
-		return 2 // substring match
-	}
-	return 3 // fuzzy match
+	return s
 }
 
 // SQLContext represents the parsed SQL context at cursor position.
@@ -362,7 +377,7 @@ func (c *Completer) allCompletions(word string) []Suggestion {
 func (c *Completer) tableSuggestions(word string) []Suggestion {
 	var s []Suggestion
 	for _, t := range c.meta.Tables {
-		if fuzzyMatch(word, t) {
+		if fuzzyMatch(word, t) || fuzzyMatch(word, nameAfterDot(t)) {
 			s = append(s, Suggestion{Text: t, Type: SuggestTable, Description: "table"})
 		}
 	}
@@ -372,7 +387,7 @@ func (c *Completer) tableSuggestions(word string) []Suggestion {
 func (c *Completer) viewSuggestions(word string) []Suggestion {
 	var s []Suggestion
 	for _, v := range c.meta.Views {
-		if fuzzyMatch(word, v) {
+		if fuzzyMatch(word, v) || fuzzyMatch(word, nameAfterDot(v)) {
 			s = append(s, Suggestion{Text: v, Type: SuggestView, Description: "view"})
 		}
 	}
