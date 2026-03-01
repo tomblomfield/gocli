@@ -2,6 +2,7 @@
 package completion
 
 import (
+	"sort"
 	"strings"
 	"unicode"
 )
@@ -98,21 +99,52 @@ func (c *Completer) Complete(text string, cursorPos int) []Suggestion {
 	// Get the word being typed
 	word := lastWord(textBefore)
 
+	var suggestions []Suggestion
 	if !c.smart {
-		return c.allCompletions(word)
-	}
+		suggestions = c.allCompletions(word)
+	} else {
+		// Parse context
+		ctx := analyzeContext(textBefore)
 
-	// Parse context
-	ctx := analyzeContext(textBefore)
-
-	// If after a dot, the filter word is just the part after the dot
-	if ctx.AfterDot {
-		if dotIdx := strings.LastIndex(word, "."); dotIdx >= 0 {
-			word = word[dotIdx+1:]
+		// If after a dot, the filter word is just the part after the dot
+		if ctx.AfterDot {
+			if dotIdx := strings.LastIndex(word, "."); dotIdx >= 0 {
+				word = word[dotIdx+1:]
+			}
 		}
+
+		suggestions = c.contextCompletions(ctx, word)
 	}
 
-	return c.contextCompletions(ctx, word)
+	// Sort by match quality: prefix > substring > fuzzy
+	if word != "" {
+		sortByMatchQuality(suggestions, word)
+	}
+
+	return suggestions
+}
+
+func sortByMatchQuality(suggestions []Suggestion, word string) {
+	wordLower := strings.ToLower(word)
+	sort.SliceStable(suggestions, func(i, j int) bool {
+		si := matchScore(suggestions[i].Text, wordLower)
+		sj := matchScore(suggestions[j].Text, wordLower)
+		return si < sj
+	})
+}
+
+func matchScore(candidate, wordLower string) int {
+	candidateLower := strings.ToLower(candidate)
+	if candidateLower == wordLower {
+		return 0 // exact match
+	}
+	if strings.HasPrefix(candidateLower, wordLower) {
+		return 1 // prefix match
+	}
+	if strings.Contains(candidateLower, wordLower) {
+		return 2 // substring match
+	}
+	return 3 // fuzzy match
 }
 
 // SQLContext represents the parsed SQL context at cursor position.
